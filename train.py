@@ -209,7 +209,7 @@ param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
 muon_params = [p for n, p in param_dict.items() if p.dim() >= 2]
 
 muon = Muon(muon_params)
-modif_muon = OneSided(muon_params)
+modif_muon = OneSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
 
 optimizers = [modif_muon, adamW]
 
