@@ -28,7 +28,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
-from OneSided import OneSided
+from one_sided import OneSided
 from muon import Muon
 
 # -----------------------------------------------------------------------------
