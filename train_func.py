@@ -11,7 +11,7 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 from muon import Muon
-from OneSided import OneSided
+from one_sided import OneSided
 
 # -----------------------------------------------------------------------------
 # fixed config (you can still override these inside the function or via globals)
