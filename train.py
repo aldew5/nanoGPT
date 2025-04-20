@@ -28,6 +28,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
+from OneSided import OneSided
+from muon import Muon
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -66,6 +68,7 @@ decay_lr = True # whether to decay the learning rate
 warmup_iters = 2000 # how many steps to warm up for
 lr_decay_iters = 600000 # should be ~= max_iters per Chinchilla
 min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+#min_lr = 1e-3
 # DDP settings
 backend = 'nccl' # 'nccl', 'gloo', etc.
 # system
@@ -196,9 +199,24 @@ model.to(device)
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
 # optimizer
-optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
+# NOTE: changed
+adamW = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type, ignore_params=True)
+
+# Muon only deals with params of dim >= 2
+param_dict = {pn: p for pn, p in model.named_parameters()}
+# filter out those that do not require grad
+param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+muon_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+
+muon = Muon(muon_params)
+modif_muon = OneSided(muon_params)
+
+optimizers = [modif_muon, adamW]
+
+
 if init_from == 'resume':
-    optimizer.load_state_dict(checkpoint['optimizer'])
+    for optimizer in optimizers:
+        optimizer.load_state_dict(checkpoint['optimizer'])
 checkpoint = None # free up memory
 
 # compile the model
@@ -253,12 +271,12 @@ local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
 while True:
-
     # determine and set the learning rate for this iteration
     lr = get_lr(iter_num) if decay_lr else learning_rate
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
+    
+    for optimizer in optimizers:
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
@@ -273,10 +291,11 @@ while True:
             })
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
+            state_dict = optimizers[0].state_dict if len(optimizers) == 1 else (optimizers[0].state_dict(), optimizers[1].state_dict)
             if iter_num > 0:
                 checkpoint = {
                     'model': raw_model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
+                    'optimizer': state_dict,
                     'model_args': model_args,
                     'iter_num': iter_num,
                     'best_val_loss': best_val_loss,
@@ -305,13 +324,18 @@ while True:
         scaler.scale(loss).backward()
     # clip the gradient
     if grad_clip != 0.0:
-        scaler.unscale_(optimizer)
+        # TODO: do we need to clip muon grads?
+        for optimizer in optimizers:
+            scaler.unscale_(optimizer)
+        #scaler.unscale_(optimizers[1])
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
     # step the optimizer and scaler if training in fp16
-    scaler.step(optimizer)
+    for optimizer in optimizers:
+        scaler.step(optimizer)
     scaler.update()
     # flush the gradients as soon as we can, no need for this memory anymore
-    optimizer.zero_grad(set_to_none=True)
+    for optimizer in optimizers:
+        optimizer.zero_grad(set_to_none=True)
 
     # timing and logging
     t1 = time.time()
