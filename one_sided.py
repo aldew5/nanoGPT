@@ -2,30 +2,9 @@ import torch
 
 class OneSided(torch.optim.Optimizer):
     """
-    Muon – MomentUm Orthogonalized by Kronecker-Factored Preconditioning
 
-    This optimizer implements an update rule that can be interpreted as an approximate natural
-    gradient descent. For each 2D parameter matrix μ (with shape (m, n)), the following steps are
-    performed:
-
-      1. Compute the gradient G = ∇ℓ(μ).
-      2. Update a momentum buffer using:
-             M ← (1 - β₁) * M + β₁ * G
-         (if Nesterov momentum is enabled, the effective gradient becomes G + β₁ M)
-      3. Compute a running estimate of a covariance matrix:
-         - If m ≤ n (a “tall” matrix), estimate the row covariance:
-             S^(C) ← (1 - β₂) S^(C) + β₂ (G Gᵀ / n + λ I_m)
-           and update:
-             μ ← μ - η * (S^(C))^(-1/2) M
-         - Otherwise (m > n, “wide” matrix), estimate the column covariance:
-             S^(K) ← (1 - β₂) S^(K) + β₂ (Gᵀ G / m + λ I_n)
-           and update:
-             μ ← μ - η * M (S^(K))^(-1/2)
-    Here η is the learning rate, β₁ the momentum factor, β₂ the covariance momentum, and λ is a
-    small damping constant.
-    
     **Warnings:**
-      - This optimizer assumes that all parameters are 2D.
+      - Assumes that all parameters are 2D.
       - Do not use it for parameters that are 0D/1D (e.g. embeddings or final FC layers).
       - For convolutional filters (4D tensors) you should flatten the last dimensions.
     """
