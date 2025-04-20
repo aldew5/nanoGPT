@@ -11,7 +11,7 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 from muon import Muon
-from wu import ModifiedMuon
+from OneSided import OneSided
 
 # -----------------------------------------------------------------------------
 # fixed config (you can still override these inside the function or via globals)
@@ -95,7 +95,7 @@ def train_with_modified_muon(muon_lr, weight_decay, momentum, cov_momentum):
     muon_params  = [p for p in params.values() if p.dim() >= 2]
     other_params = [p for p in params.values() if p.dim() < 2]
 
-    mod_muon = ModifiedMuon(
+    mod_muon = OneSided(
         muon_params,
         lr=muon_lr,
         momentum=momentum,
