@@ -30,6 +30,7 @@ from torch.distributed import init_process_group, destroy_process_group
 from model import GPTConfig, GPT
 from optimizers.one_sided import OneSided
 from optimizers.two_sided import TwoSided
+from optimizers.two_sided_wu import TwoSided2
 from optimizers.muon import Muon
 
 # -----------------------------------------------------------------------------
@@ -74,7 +75,7 @@ min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchi
 backend = 'nccl' # 'nccl', 'gloo', etc.
 # system
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float32' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
@@ -211,7 +212,8 @@ muon_params = [p for n, p in param_dict.items() if p.dim() >= 2]
 
 muon = Muon(muon_params)
 #modif_muon = OneSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
-modif_muon = TwoSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
+modif_muon = TwoSided(muon_params, cov_momentum=1e-2, momentum=0.9527, lr=3e-4)
+#modif_muon = TwoSided2(muon_params)
 
 optimizers = [modif_muon, adamW]
 

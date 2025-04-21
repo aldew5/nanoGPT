@@ -5,8 +5,8 @@ class TwoSided(Optimizer):
     """
     Two-Sided version
     """
-    def __init__(self, params, lr=3e-4, momentum=0.9, cov_momentum=0.99,
-                 weight_decay=0.0, nesterov=True, eps=1e-8, T_stats=1, lam=1e-5):
+    def __init__(self, params, lr=3e-4, momentum=0.9, cov_momentum=1e-2,
+                 weight_decay=1e-2, nesterov=True, eps=1e-8, T_stats=2, lam=1e-8):
         defaults = dict(lr=lr, momentum=momentum, cov_momentum=cov_momentum,
                         lam=lam, weight_decay=weight_decay,
                         nesterov=nesterov, eps=eps, T_stats=T_stats)
