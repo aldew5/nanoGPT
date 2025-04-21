@@ -29,6 +29,7 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 from optimizers.one_sided import OneSided
+from optimizers.two_sided import TwoSided
 from optimizers.muon import Muon
 
 # -----------------------------------------------------------------------------
@@ -209,7 +210,8 @@ param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
 muon_params = [p for n, p in param_dict.items() if p.dim() >= 2]
 
 muon = Muon(muon_params)
-modif_muon = OneSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
+#modif_muon = OneSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
+modif_muon = TwoSided(muon_params, cov_momentum=0.8556, momentum=0.9527, lr=0.00081)
 
 optimizers = [modif_muon, adamW]
 

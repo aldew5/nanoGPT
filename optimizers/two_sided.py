@@ -5,10 +5,10 @@ class TwoSided(Optimizer):
     """
     Two-Sided version
     """
-    def __init__(self, params, lr=3e-4, momentum=0.9, cov_momentum=0.99, damping=1e-5,
-                 weight_decay=0.0, nesterov=True, eps=1e-8, T_stats=1):
+    def __init__(self, params, lr=3e-4, momentum=0.9, cov_momentum=0.99,
+                 weight_decay=0.0, nesterov=True, eps=1e-8, T_stats=1, lam=1e-5):
         defaults = dict(lr=lr, momentum=momentum, cov_momentum=cov_momentum,
-                        damping=damping, weight_decay=weight_decay,
+                        lam=lam, weight_decay=weight_decay,
                         nesterov=nesterov, eps=eps, T_stats=T_stats)
         super().__init__(params, defaults)
         self.step_count = 0
@@ -19,11 +19,11 @@ class TwoSided(Optimizer):
             lr = group['lr']
             beta1 = group['momentum']
             beta2 = group['cov_momentum']
-            damping = group['damping']
             wd = group['weight_decay']
             nesterov = group['nesterov']
             eps = group['eps']
             T_stats = group['T_stats']
+            lam = group['lam']
 
             for p in group['params']:
                 if p.grad is None:
@@ -45,22 +45,26 @@ class TwoSided(Optimizer):
                 grad_eff = G + beta1 * M if nesterov else M
 
                 m, n = G.shape
-                # initialize covariances
+                # init cov
                 if 'S_C' not in state:
-                    state['S_C'] = damping * torch.eye(m, device=G.device, dtype=G.dtype)
+                    state['S_C'] = lam * torch.eye(m, device=G.device, dtype=G.dtype)
                 if 'S_K' not in state:
-                    state['S_K'] = damping * torch.eye(n, device=G.device, dtype=G.dtype)
+                    state['S_K'] = lam * torch.eye(n, device=G.device, dtype=G.dtype)
                 S_C = state['S_C']
                 S_K = state['S_K']
 
                 # update cov every T_stats steps
                 if self.step_count % T_stats == 0:
+                    # compute inverses
+                    S_K_inv = (S_K + eps * torch.eye(S_K.size(0))).inverse()
+                    S_C_inv = (S_C + eps * torch.eye(S_C.size(0))).inverse()
                     # row-covariance
                     S_C.mul_(1 - beta2)
-                    S_C.add_(beta2, G @ G.t().div(n) + damping * torch.eye(m, device=G.device, dtype=G.dtype))
+
+                    S_C += beta2/n * (G @ S_K_inv @ G.t()) + lam * torch.trace(S_K_inv) * torch.eye(S_C.size(0))
                     # col-covariance
                     S_K.mul_(1 - beta2)
-                    S_K.add_(beta2, G.t() @ G.div(m) + damping * torch.eye(n, device=G.device, dtype=G.dtype))
+                    S_K += beta2/m * (G.t() @ S_C_inv @ G + lam * torch.trace(S_C_inv) * torch.eye(S_K.size(0)))
 
                 # eigendecomposition for inv_sqrt
                 dC, QC = torch.linalg.eigh(S_C)
@@ -68,7 +72,6 @@ class TwoSided(Optimizer):
                 dK, QK = torch.linalg.eigh(S_K)
                 inv_sqrt_K = QK @ torch.diag(dK.add(eps).rsqrt()) @ QK.t()
 
-                # two-sided preconditioned update
                 W = inv_sqrt_C @ grad_eff @ inv_sqrt_K
                 norm = W.mul(W).mean().sqrt().clamp_min(eps)
                 step_size = lr / norm
